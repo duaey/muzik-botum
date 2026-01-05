@@ -3,22 +3,27 @@ from discord.ext import commands
 import yt_dlp
 import os
 import asyncio
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import threading
+from flask import Flask
+from threading import Thread
 import static_ffmpeg
 
-# kanka ffmpeg'i burada hazirliyoruz ki bot baslarken yolunu bulsun
+# kanka flask ile koyeb'i kandirma operasyonu
+app = Flask('')
+@app.route('/')
+def home():
+    return "bot canavar gibi kanka sorun yok"
+
+def run():
+    # koyeb 8080 portunu bekler kanka
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+# ffmpeg ayari
 static_ffmpeg.add_paths()
 FFMPEG_PATH = static_ffmpeg.run.get_ffmpeg_bin()
-
-# Koyeb canli tutma servisi
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"bot canavar gibi calisiyor kanka")
-
-threading.Thread(target=lambda: HTTPServer(('0.0.0.0', 8080), HealthCheckHandler).serve_forever(), daemon=True).start()
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='!', intents=intents)
@@ -46,13 +51,13 @@ async def play(ctx, *, url):
     if not ctx.author.voice:
         return await ctx.send("once sese gir kanka")
     
-    # baglanti varsa temizle baştan baglan (4006 savar)
     if ctx.voice_client:
         await ctx.voice_client.disconnect(force=True)
         await asyncio.sleep(1)
     
     try:
-        vc = await ctx.author.voice.channel.connect(timeout=20.0, self_deaf=True)
+        # kanka sese baglanirken us-east kullanmayi unutma discord'dan
+        vc = await ctx.author.voice.channel.connect(timeout=30.0, self_deaf=True)
     except Exception as e:
         return await ctx.send(f"sese girerken patladik: {e}")
     
@@ -60,28 +65,21 @@ async def play(ctx, *, url):
         try:
             with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
-                if 'entries' in info:
-                    info = info['entries'][0]
-                
+                if 'entries' in info: info = info['entries'][0]
                 audio_url = info['url']
                 
-                # kanka asil olay burada yolu elle veriyoruz
-                source = discord.FFmpegPCMAudio(
-                    audio_url, 
-                    executable=FFMPEG_PATH, 
-                    **ffmpeg_opts
-                )
-                
+                source = discord.FFmpegPCMAudio(audio_url, executable=FFMPEG_PATH, **ffmpeg_opts)
                 vc.play(source)
-                await ctx.send(f'su an caliyor kanka: **{info["title"]}**')
+                await ctx.send(f'caliyor kanka: **{info["title"]}**')
         except Exception as e:
-            await ctx.send(f"oynatırken hata cikti: {e}")
+            await ctx.send(f"hata var: {e}")
 
 @bot.command()
 async def stop(ctx):
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
-        await ctx.send("kactim kanka hadi eyvallah")
+        await ctx.send("hadi eyvallah kactim")
 
-# kanka tokeni koyeb env kismina TOKEN olarak eklemeyi unutma
+# kanka once flask calissin sonra bot
+keep_alive()
 bot.run(os.environ.get('TOKEN'))
