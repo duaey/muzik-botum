@@ -19,7 +19,7 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(b"Bot online kanka")
+        self.wfile.write(b"Bot is alive")
 
 threading.Thread(target=lambda: HTTPServer(('0.0.0.0', 8080), HealthCheckHandler).serve_forever(), daemon=True).start()
 
@@ -33,23 +33,23 @@ ffmpeg_opts = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_
 
 @bot.event
 async def on_ready():
-    print(f'bot online: {bot.user}')
+    print(f'bot online kanka: {bot.user}')
 
 @bot.command()
 async def play(ctx, *, url):
     if not ctx.author.voice:
-        return await ctx.send("once sese gir kanka")
+        return await ctx.send("get in a voice channel first")
     
-    # baglantiyi sifirdan kuralim kanka
+    # 4006 hatasini temizlemek icin eski baglantiyi silip 2 saniye bekletiyoruz
     if ctx.voice_client:
         await ctx.voice_client.disconnect(force=True)
-        await asyncio.sleep(1)
+        await asyncio.sleep(2)
 
     try:
-        # kendi kendine sagirlastirmayi (self_deaf) kapatalim bazen 4006 sebebi bu oluyor
-        vc = await ctx.author.voice.channel.connect(timeout=20.0, reconnect=True, self_deaf=False)
+        # kanka 4006 hatasini onlemek icin self_deaf=True yapalim bu cok onemli
+        vc = await ctx.author.voice.channel.connect(timeout=60.0, self_deaf=True)
     except Exception as e:
-        return await ctx.send(f"baglanti hatasi: {e}")
+        return await ctx.send(f"connection error: {e}")
 
     async with ctx.typing():
         try:
@@ -58,8 +58,8 @@ async def play(ctx, *, url):
                 url2 = info['url']
                 source = discord.FFmpegPCMAudio(url2, executable=FFMPEG_EXE, **ffmpeg_opts)
                 vc.play(source)
-                await ctx.send(f'caliyor kanka: **{info["title"]}**')
+                await ctx.send(f'now playing: **{info["title"]}**')
         except Exception as e:
-            await ctx.send(f"oynatma hatasi: {e}")
+            await ctx.send(f"playback error: {e}")
 
 bot.run(os.environ.get('TOKEN'))
