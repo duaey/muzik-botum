@@ -6,10 +6,11 @@ import os
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 import static_ffmpeg
+from static_ffmpeg import run
 
-# setup ffmpeg path
+# setup ffmpeg path - fixed the attribute error
 static_ffmpeg.add_paths()
-FFMPEG_EXE = static_ffmpeg.get_ffmpeg_bin()
+FFMPEG_EXE = run.get_platform_executables_or_raise()[0]
 
 # koyeb health check server
 class HealthCheckHandler(BaseHTTPRequestHandler):
@@ -67,7 +68,6 @@ async def play(ctx, *, url):
         with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             url2 = info['url']
-            # using opus for better compatibility
             source = await discord.FFmpegOpusAudio.from_probe(url2, executable=FFMPEG_EXE, **ffmpeg_opts)
             ctx.voice_client.play(source)
     
