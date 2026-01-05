@@ -19,7 +19,7 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(b"Bot is online")
+        self.wfile.write(b"Bot online kanka")
 
 threading.Thread(target=lambda: HTTPServer(('0.0.0.0', 8080), HealthCheckHandler).serve_forever(), daemon=True).start()
 
@@ -33,23 +33,23 @@ ffmpeg_opts = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_
 
 @bot.event
 async def on_ready():
-    print(f'bot online kanka: {bot.user}')
+    print(f'bot online: {bot.user}')
 
 @bot.command()
 async def play(ctx, *, url):
     if not ctx.author.voice:
         return await ctx.send("once sese gir kanka")
     
-    # kanka eski baglantiyi tamamen temizle
+    # baglantiyi sifirdan kuralim kanka
     if ctx.voice_client:
         await ctx.voice_client.disconnect(force=True)
         await asyncio.sleep(1)
 
     try:
-        # timeout suresini 30 saniye yaptim ki yavas internette hata vermesin
-        vc = await ctx.author.voice.channel.connect(timeout=30.0, reconnect=True)
+        # kendi kendine sagirlastirmayi (self_deaf) kapatalim bazen 4006 sebebi bu oluyor
+        vc = await ctx.author.voice.channel.connect(timeout=20.0, reconnect=True, self_deaf=False)
     except Exception as e:
-        return await ctx.send(f"baglanti hatasi kanka: {e}")
+        return await ctx.send(f"baglanti hatasi: {e}")
 
     async with ctx.typing():
         try:
@@ -57,9 +57,8 @@ async def play(ctx, *, url):
                 info = ydl.extract_info(url, download=False)
                 url2 = info['url']
                 source = discord.FFmpegPCMAudio(url2, executable=FFMPEG_EXE, **ffmpeg_opts)
-                # sese girince hemen calmaya basla
                 vc.play(source)
-                await ctx.send(f'caliyor: **{info["title"]}**')
+                await ctx.send(f'caliyor kanka: **{info["title"]}**')
         except Exception as e:
             await ctx.send(f"oynatma hatasi: {e}")
 
