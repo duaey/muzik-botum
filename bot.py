@@ -6,17 +6,21 @@ import os
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 import static_ffmpeg
+from static_ffmpeg import run
 
-# ffmpeg setup
+# setup ffmpeg path correctly
 static_ffmpeg.add_paths()
-# hata veren o uzun komut yerine direkt bunu kullanalım kanka
-FFMPEG_EXE = "ffmpeg" 
+try:
+    FFMPEG_EXE = run.get_or_fetch_platform_executables_else_raise()[0]
+except:
+    FFMPEG_EXE = "ffmpeg"
 
+# koyeb health check server
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(b"Bot is online")
+        self.wfile.write(b"Bot is running")
 
 def run_health_check():
     server = HTTPServer(('0.0.0.0', 8080), HealthCheckHandler)
@@ -64,14 +68,17 @@ async def play(ctx, *, url):
         ctx.voice_client.stop()
 
     async with ctx.typing():
-        with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            url2 = info['url']
-            # opus ile ses daha saglam gider
-            source = await discord.FFmpegOpusAudio.from_probe(url2, method='fallback', **ffmpeg_opts)
-            ctx.voice_client.play(source)
-    
-    await ctx.send(f'now playing: **{info["title"]}**')
+        try:
+            with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                url2 = info['url']
+                
+                # using standard FFmpegPCMAudio for stability
+                source = discord.FFmpegPCMAudio(url2, executable=FFMPEG_EXE, **ffmpeg_opts)
+                ctx.voice_client.play(source)
+                await ctx.send(f'now playing: **{info["title"]}**')
+        except Exception as e:
+            await ctx.send(f"an error occurred: {e}")
 
 @bot.command()
 async def stop(ctx):
