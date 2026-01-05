@@ -12,7 +12,6 @@ def home(): return "bot canavar"
 def run(): app.run(host='0.0.0.0', port=8080)
 def keep_alive(): Thread(target=run, daemon=True).start()
 
-# kanka baglanti hatasini cozmek icin sese giris mantigini degistirdik
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='!', intents=intents)
 
@@ -22,7 +21,7 @@ ytdl_opts = {
     'quiet': True,
     'no_warnings': True,
     'default_search': 'auto',
-    'nocheckcertificate': True
+    'nocheckcertificate': True,
 }
 
 ffmpeg_opts = {
@@ -39,26 +38,23 @@ async def play(ctx, *, search):
     if not ctx.author.voice:
         return await ctx.send("once sese gir kanka")
 
-    # kanka eski baglantiyi zorla kapat
     if ctx.voice_client:
         await ctx.voice_client.disconnect(force=True)
         await asyncio.sleep(1)
 
     try:
-        # kanka sese girerken artik daha sabirliyiz
-        vc = await ctx.author.voice.channel.connect(timeout=30.0, self_deaf=True)
+        # kanka reconnect ekledik ki index hatasini zorlasin gecsin
+        vc = await ctx.author.voice.channel.connect(timeout=30.0, self_deaf=True, reconnect=True)
     except Exception as e:
-        # kanka eger hala index hatasi verirse kütüphane sürümü sakat demektir
-        return await ctx.send(f"baglanti hatasi (index hatasi ise dc.py guncelle): {e}")
+        return await ctx.send(f"baglanti hatasi: {e}")
 
     async with ctx.typing():
         try:
-            # kanka eger direkt mp3 linki attiysan youtube'u hic karistirmiyoruz
-            if search.endswith('.mp3'):
+            # kanka mp3 linki ise youtube'a hic sormuyoruz bile
+            if search.startswith('http') and (search.endswith('.mp3') or 'soundhelix' in search):
                 source_url = search
-                title = "MP3 Dosyasi"
+                title = "MP3 Linki"
             else:
-                # kanka youtube engeli varsa burasi patlar o yuzden buraya ozel kontrol
                 with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
                     info = ydl.extract_info(f"ytsearch1:{search}", download=False)['entries'][0]
                     source_url = info['url']
@@ -68,7 +64,7 @@ async def play(ctx, *, search):
             vc.play(source)
             await ctx.send(f'caliyor kanka: **{title}**')
         except Exception as e:
-            await ctx.send(f"hata cikti kanka: {e}")
+            await ctx.send(f"hata kanka: {e}")
 
 keep_alive()
 bot.run(os.environ.get('TOKEN'))
