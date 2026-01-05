@@ -3,6 +3,23 @@ from discord.ext import commands
 import yt_dlp
 import asyncio
 import os
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
+
+# --- KOYEB ICIN YALANCI WEB SUNUCUSU ---
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is alive!")
+
+def run_health_check():
+    server = HTTPServer(('0.0.0.0', 8080), HealthCheckHandler)
+    server.serve_forever()
+
+# Sunucuyu arka planda baslat
+threading.Thread(target=run_health_check, daemon=True).start()
+# --------------------------------------
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -10,34 +27,21 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-ytdl_format_options = {'format': 'bestaudio/best', 'noplaylist': True, 'nocheckcertificate': True, 'quiet': True, 'no_warnings': True, 'default_search': 'auto', 'source_address': '0.0.0.0'}
-ffmpeg_options = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
-ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
-
-class YTDLSource(discord.PCMVolumeTransformer):
-    def __init__(self, source, *, data, volume=0.5):
-        super().__init__(source, volume)
-        self.data = data
-        self.title = data.get('title')
-    @classmethod
-    async def from_url(cls, url, *, loop=None, stream=True):
-        loop = loop or asyncio.get_event_loop()
-        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
-        if 'entries' in data: data = data['entries'][0]
-        return cls(discord.FFmpegPCMAudio(data['url'], **ffmpeg_options), data=data)
+ytdl_opts = {'format': 'bestaudio/best', 'noplaylist': True, 'nocheckcertificate': True, 'quiet': True}
+ffmpeg_opts = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
 
 @bot.event
-async def on_ready(): print(f'bot online: {bot.user}')
+async def on_ready():
+    print(f'bot koyebe yerlesti kanka: {bot.user}')
 
 @bot.command()
 async def cal(ctx, *, url):
-    if not ctx.voice_client: await ctx.author.voice.channel.connect()
-    player = await YTDLSource.from_url(url, loop=bot.loop, stream=True)
-    ctx.voice_client.play(player)
-    await ctx.send(f'caliniyor: {player.title}')
+    if not ctx.voice_client:
+        await ctx.author.voice.channel.connect()
+    with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+        url2 = info['url']
+        ctx.voice_client.play(discord.FFmpegPCMAudio(url2, **ffmpeg_opts))
+    await ctx.send(f'caliyorum: {info["title"]}')
 
-@bot.command()
-async def dur(ctx):
-    if ctx.voice_client: await ctx.voice_client.disconnect()
-
-bot.run(os.getenv('TOKEN')) # burası böyle kalsın tokeni siteye yazacağız
+bot.run(os.environ.get('TOKEN'))
