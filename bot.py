@@ -6,12 +6,12 @@ import asyncio
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 
-# Health check kanka
+# kanka botun kapanmamasi icin health check sart
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(b"Bot online")
+        self.wfile.write(b"bot online kanka")
 
 threading.Thread(target=lambda: HTTPServer(('0.0.0.0', 8080), HealthCheckHandler).serve_forever(), daemon=True).start()
 
@@ -30,13 +30,17 @@ async def play(ctx, *, url):
     if not ctx.author.voice:
         return await ctx.send("once sese gir kanka")
     
-    if not ctx.voice_client:
-        try:
-            # kanka 4006 ve index hatasi icin burasi cok kritik
-            await ctx.author.voice.channel.connect(timeout=20.0, self_deaf=True)
-        except Exception as e:
-            return await ctx.send(f"sese giremedik: {e}")
-    
+    # kanka 4006 hatasini asmak icin her play'de baglantiyi yeniliyoruz
+    if ctx.voice_client:
+        await ctx.voice_client.disconnect(force=True)
+        await asyncio.sleep(1)
+
+    try:
+        # kanka sese baglanirken gateway'i kandirmak icin deaf modu acik giriyoruz
+        vc = await ctx.author.voice.channel.connect(timeout=20.0, self_deaf=True)
+    except Exception as e:
+        return await ctx.send(f"baglanti patladi: {e}")
+
     async with ctx.typing():
         try:
             with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
@@ -44,9 +48,7 @@ async def play(ctx, *, url):
                 if 'entries' in info: info = info['entries'][0]
                 url2 = info['url']
                 source = discord.FFmpegPCMAudio(url2, **ffmpeg_opts)
-                
-                if ctx.voice_client.is_playing(): ctx.voice_client.stop()
-                ctx.voice_client.play(source)
+                vc.play(source)
                 await ctx.send(f'caliyor kanka: **{info["title"]}**')
         except Exception as e:
             await ctx.send(f"hata var: {e}")
