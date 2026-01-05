@@ -6,14 +6,13 @@ import asyncio
 from flask import Flask
 from threading import Thread
 
-# flask kanka (koyeb uyutmasin diye)
+# koyeb canli tutma
 app = Flask('')
 @app.route('/')
-def home(): return "canavar gibi calisiyor kanka"
+def home(): return "bot canavar"
 def run(): app.run(host='0.0.0.0', port=8080)
 def keep_alive(): Thread(target=run, daemon=True).start()
 
-# kanka intents ayarlarini dibine kadar actim (portal'dan da acmayi unutma)
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='!', intents=intents)
 
@@ -21,11 +20,9 @@ ytdl_opts = {
     'format': 'bestaudio/best',
     'noplaylist': True,
     'quiet': True,
-    'no_warnings': True,
     'default_search': 'auto',
     'source_address': '0.0.0.0',
-    'nocheckcertificate': True,
-    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36'
+    'nocheckcertificate': True
 }
 
 ffmpeg_opts = {
@@ -35,41 +32,36 @@ ffmpeg_opts = {
 
 @bot.event
 async def on_ready():
-    print(f'bot hazir kanka: {bot.user}')
+    print(f'bot online: {bot.user}')
 
 @bot.command()
-async def play(ctx, *, search: str):
-    # sese baglanma kanka
+async def play(ctx, *, search):
     if not ctx.author.voice:
         return await ctx.send("once sese gir kanka")
-    
-    if not ctx.voice_client:
-        vc = await ctx.author.voice.channel.connect(timeout=20, self_deaf=True)
-    else:
-        vc = ctx.voice_client
+
+    # kanka eski baglantiyi temizle
+    if ctx.voice_client:
+        await ctx.voice_client.disconnect(force=True)
+        await asyncio.sleep(1)
+
+    try:
+        # kanka bu baglanti satiri discord'un yeni guncellemesine uygun
+        vc = await ctx.author.voice.channel.connect(timeout=20.0, self_deaf=True)
+    except Exception as e:
+        return await ctx.send(f"baglanti hatasi: {e}")
 
     async with ctx.typing():
         try:
             with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
-                # kanka arama sonucunu oyle bi cekiyoruz ki hata payi kalmiyor
-                info = ydl.extract_info(f"ytsearch1:{search}", download=False)
-                if 'entries' in info and len(info['entries']) > 0:
-                    info = info['entries'][0]
-                
+                info = ydl.extract_info(f"ytsearch1:{search}", download=False)['entries'][0]
                 url = info['url']
                 
-                if vc.is_playing():
-                    vc.stop()
-                
-                # kanka artik direkt sistemdeki ffmpeg'i kullaniyoruz
-                source = discord.FFmpegPCMAudio(url, **ffmpeg_opts)
+                # kanka ffmpeg sistemde Aptfile ile yuklendi artik
+                source = discord.FFmpegPCMAudio(url, executable='ffmpeg', **ffmpeg_opts)
                 vc.play(source)
                 await ctx.send(f'caliyor kanka: **{info["title"]}**')
-                
         except Exception as e:
-            print(f"hata detayi kanka: {e}")
-            await ctx.send(f"hata kanka valla patladik: {e}")
+            await ctx.send(f"oynatma hatasi: {e}")
 
-# kanka tokeni os'tan cekiyoruz
 keep_alive()
 bot.run(os.environ.get('TOKEN'))
