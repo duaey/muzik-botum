@@ -2,87 +2,66 @@ import discord
 from discord.ext import commands
 import yt_dlp
 import os
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import threading
 import static_ffmpeg
 from static_ffmpeg import run
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
 
-# ffmpeg ayarlarını baştan yapalım kanka
+# ffmpeg ayari
 static_ffmpeg.add_paths()
 try:
     FFMPEG_EXE = run.get_or_fetch_platform_executables_else_raise()[0]
 except:
     FFMPEG_EXE = "ffmpeg"
 
+# health check kismi (koyeb icin sart)
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(b"Bot is online")
+        self.wfile.write(b"Bot is alive")
 
-def run_health_check():
-    server = HTTPServer(('0.0.0.0', 8080), HealthCheckHandler)
-    server.serve_forever()
-
-threading.Thread(target=run_health_check, daemon=True).start()
+threading.Thread(target=lambda: HTTPServer(('0.0.0.0', 8080), HealthCheckHandler).serve_forever(), daemon=True).start()
 
 intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True
-
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# en basit ve stabil ayarlar
-ytdl_opts = {
-    'format': 'bestaudio/best',
-    'noplaylist': True,
-    'quiet': True,
-    'no_warnings': True,
-    'default_search': 'auto',
-    'source_address': '0.0.0.0'
-}
-
-# ses paketlerinin gitmesi için kritik ayarlar
-ffmpeg_opts = {
-    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-    'options': '-vn -b:a 128k'
-}
+ytdl_opts = {'format': 'bestaudio/best', 'noplaylist': True, 'quiet': True, 'no_warnings': True}
+# kanka buradaki -reconnect ayarlari sesin kesilmemesini saglar
+ffmpeg_opts = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
 
 @bot.event
 async def on_ready():
-    print(f'bot is online: {bot.user}')
+    print(f'bot is online kanka: {bot.user}')
 
 @bot.command()
 async def play(ctx, *, url):
+    if not ctx.author.voice:
+        return await ctx.send("get in a voice channel first bro")
+    
     if not ctx.voice_client:
-        if ctx.author.voice:
-            await ctx.author.voice.channel.connect()
-        else:
-            return await ctx.send("you need to be in a voice channel first")
+        # kanka baglanirken self_deaf kapali olsun bazen o da sorun cikariyor
+        await ctx.author.voice.channel.connect(self_deaf=False)
     
     if ctx.voice_client.is_playing():
         ctx.voice_client.stop()
 
     async with ctx.typing():
-        try:
-            with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                url2 = info['url']
-                
-                # kanka FFmpegPCMAudio'yu en yalın haliyle kullanalım
-                # opus falan karıştırmayalım ki kütüphane çakışmasın
-                source = discord.FFmpegPCMAudio(url2, executable=FFMPEG_EXE, **ffmpeg_opts)
-                
-                # botun ses kanalındaki ses seviyesini sabitleyelim
-                ctx.voice_client.play(source)
-                await ctx.send(f'now playing: **{info["title"]}**')
-        except Exception as e:
-            await ctx.send(f"error: {e}")
+        with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            url2 = info['url']
+            # kanka direkt pcm audio kullanarak kütüphane riskini azaltiyoruz
+            source = discord.FFmpegPCMAudio(url2, executable=FFMPEG_EXE, **ffmpeg_opts)
+            ctx.voice_client.play(source)
+    
+    await ctx.send(f'now playing: **{info["title"]}**')
 
 @bot.command()
 async def stop(ctx):
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
-        await ctx.send("disconnected")
+        await ctx.send("bye bye")
 
 bot.run(os.environ.get('TOKEN'))
