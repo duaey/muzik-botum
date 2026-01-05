@@ -6,7 +6,7 @@ import asyncio
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 
-# kanka ffmpeg isini en garanti yola aliyoruz
+# Health check
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -18,14 +18,12 @@ threading.Thread(target=lambda: HTTPServer(('0.0.0.0', 8080), HealthCheckHandler
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# youtube ayarlari
 ytdl_opts = {
     'format': 'bestaudio/best',
     'noplaylist': True,
     'quiet': True,
     'no_warnings': True,
-    'default_search': 'auto',
-    'source_address': '0.0.0.0'
+    'default_search': 'auto'
 }
 
 ffmpeg_opts = {
@@ -35,26 +33,31 @@ ffmpeg_opts = {
 
 @bot.event
 async def on_ready():
-    print(f'bot online: {bot.user}')
+    print(f'bot online kanka: {bot.user}')
 
 @bot.command()
 async def play(ctx, *, url):
     if not ctx.author.voice:
         return await ctx.send("once sese gir kanka")
     
+    # bagli degilsek baglanalim
     if not ctx.voice_client:
-        await ctx.author.voice.channel.connect()
+        try:
+            # kanka 4006 ve index hatasini onlemek icin self_deaf=True yapalim
+            await ctx.author.voice.channel.connect(timeout=30.0, self_deaf=True)
+        except Exception as e:
+            return await ctx.send(f"sese girerken patladik: {e}")
     
     async with ctx.typing():
         try:
             with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
-                # kanka eger bir liste donerse ilkini al diyoruz hata cikmasin
                 if 'entries' in info:
                     info = info['entries'][0]
                 
                 url2 = info['url']
-                # kanka direkt ffmpeg yaziyoruz koyeb bunu otomatik tanir artik
+                # kanka FFmpegPCMAudio'nun icindeki executable kismini sildim 
+                # koyeb paketleri kurunca kendi bulsun
                 source = discord.FFmpegPCMAudio(url2, **ffmpeg_opts)
                 
                 if ctx.voice_client.is_playing():
@@ -63,12 +66,12 @@ async def play(ctx, *, url):
                 ctx.voice_client.play(source)
                 await ctx.send(f'caliyor kanka: **{info["title"]}**')
         except Exception as e:
-            await ctx.send(f"hata cikti kanka: {e}")
+            await ctx.send(f"oynatma hatasi kanka: {e}")
 
 @bot.command()
 async def stop(ctx):
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
-        await ctx.send("hadi kactim")
+        await ctx.send("kactim kanka")
 
 bot.run(os.environ.get('TOKEN'))
