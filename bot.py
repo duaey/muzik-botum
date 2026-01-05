@@ -6,18 +6,17 @@ import os
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 import static_ffmpeg
-from static_ffmpeg import run
 
-# setup ffmpeg path - fixed the attribute error
+# ffmpeg setup
 static_ffmpeg.add_paths()
-FFMPEG_EXE = run.get_platform_executables_or_raise()[0]
+# hata veren o uzun komut yerine direkt bunu kullanalım kanka
+FFMPEG_EXE = "ffmpeg" 
 
-# koyeb health check server
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(b"Bot is running")
+        self.wfile.write(b"Bot is online")
 
 def run_health_check():
     server = HTTPServer(('0.0.0.0', 8080), HealthCheckHandler)
@@ -68,7 +67,8 @@ async def play(ctx, *, url):
         with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             url2 = info['url']
-            source = await discord.FFmpegOpusAudio.from_probe(url2, executable=FFMPEG_EXE, **ffmpeg_opts)
+            # opus ile ses daha saglam gider
+            source = await discord.FFmpegOpusAudio.from_probe(url2, method='fallback', **ffmpeg_opts)
             ctx.voice_client.play(source)
     
     await ctx.send(f'now playing: **{info["title"]}**')
@@ -77,7 +77,7 @@ async def play(ctx, *, url):
 async def stop(ctx):
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
-        await ctx.send("disconnected from voice channel")
+        await ctx.send("disconnected")
     else:
         await ctx.send("i am not in a voice channel")
 
