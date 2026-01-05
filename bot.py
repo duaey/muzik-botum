@@ -6,22 +6,23 @@ import os
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 import static_ffmpeg
-static_ffmpeg.add_paths()
 
-# --- KOYEB ICIN YALANCI WEB SUNUCUSU ---
+# setup ffmpeg path
+static_ffmpeg.add_paths()
+FFMPEG_EXE = static_ffmpeg.get_ffmpeg_bin()
+
+# koyeb health check server
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(b"Bot is alive!")
+        self.wfile.write(b"Bot is running")
 
 def run_health_check():
     server = HTTPServer(('0.0.0.0', 8080), HealthCheckHandler)
     server.serve_forever()
 
-# Sunucuyu arka planda baslat
 threading.Thread(target=run_health_check, daemon=True).start()
-# --------------------------------------
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -29,22 +30,55 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-ytdl_opts = {'format': 'bestaudio/best', 'noplaylist': True, 'nocheckcertificate': True, 'quiet': True}
-ffmpeg_opts = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
+ytdl_opts = {
+    'format': 'bestaudio/best',
+    'noplaylist': True,
+    'nocheckcertificate': True,
+    'quiet': True,
+    'no_warnings': True,
+    'default_search': 'auto',
+    'source_address': '0.0.0.0',
+    'http_headers': {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+    }
+}
+
+ffmpeg_opts = {
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+    'options': '-vn'
+}
 
 @bot.event
 async def on_ready():
-    print(f'bot koyebe yerlesti kanka: {bot.user}')
+    print(f'bot is online: {bot.user}')
 
 @bot.command()
-async def cal(ctx, *, url):
+async def play(ctx, *, url):
     if not ctx.voice_client:
-        await ctx.author.voice.channel.connect()
-    with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-        url2 = info['url']
-        ctx.voice_client.play(discord.FFmpegPCMAudio(url2, **ffmpeg_opts))
-    await ctx.send(f'caliyorum: {info["title"]}')
+        if ctx.author.voice:
+            await ctx.author.voice.channel.connect()
+        else:
+            return await ctx.send("you need to be in a voice channel first")
+    
+    if ctx.voice_client.is_playing():
+        ctx.voice_client.stop()
+
+    async with ctx.typing():
+        with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            url2 = info['url']
+            # using opus for better compatibility
+            source = await discord.FFmpegOpusAudio.from_probe(url2, executable=FFMPEG_EXE, **ffmpeg_opts)
+            ctx.voice_client.play(source)
+    
+    await ctx.send(f'now playing: **{info["title"]}**')
+
+@bot.command()
+async def stop(ctx):
+    if ctx.voice_client:
+        await ctx.voice_client.disconnect()
+        await ctx.send("disconnected from voice channel")
+    else:
+        await ctx.send("i am not in a voice channel")
 
 bot.run(os.environ.get('TOKEN'))
-
