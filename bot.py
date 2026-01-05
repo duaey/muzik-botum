@@ -8,7 +8,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 import asyncio
 
-# ffmpeg setup
+# ffmpeg tam yolunu zorlayalim
 static_ffmpeg.add_paths()
 try:
     FFMPEG_EXE = run.get_or_fetch_platform_executables_else_raise()[0]
@@ -23,13 +23,15 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
 
 threading.Thread(target=lambda: HTTPServer(('0.0.0.0', 8080), HealthCheckHandler).serve_forever(), daemon=True).start()
 
-intents = discord.Intents.default()
-intents.message_content = True
-intents.voice_states = True
+# intents ayarlarini en genis hale getirdik
+intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 ytdl_opts = {'format': 'bestaudio/best', 'noplaylist': True, 'quiet': True}
-ffmpeg_opts = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
+ffmpeg_opts = {
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+    'options': '-vn'
+}
 
 @bot.event
 async def on_ready():
@@ -40,16 +42,19 @@ async def play(ctx, *, url):
     if not ctx.author.voice:
         return await ctx.send("get in a voice channel first")
     
-    # 4006 hatasini temizlemek icin eski baglantiyi silip 2 saniye bekletiyoruz
+    # varsa eski bozuk baglantiyi zorla kapat
     if ctx.voice_client:
-        await ctx.voice_client.disconnect(force=True)
+        try:
+            await ctx.voice_client.disconnect(force=True)
+        except:
+            pass
         await asyncio.sleep(2)
 
     try:
-        # kanka 4006 hatasini onlemek icin self_deaf=True yapalim bu cok onemli
-        vc = await ctx.author.voice.channel.connect(timeout=60.0, self_deaf=True)
+        # baglanti sirasinda 4006'yi onlemek icin self_deaf ve self_mute kapali kalsin
+        vc = await ctx.author.voice.channel.connect(timeout=60.0, self_deaf=False, self_mute=False)
     except Exception as e:
-        return await ctx.send(f"connection error: {e}")
+        return await ctx.send(f"baglanti patladi kanka: {e}")
 
     async with ctx.typing():
         try:
@@ -58,8 +63,8 @@ async def play(ctx, *, url):
                 url2 = info['url']
                 source = discord.FFmpegPCMAudio(url2, executable=FFMPEG_EXE, **ffmpeg_opts)
                 vc.play(source)
-                await ctx.send(f'now playing: **{info["title"]}**')
+                await ctx.send(f'caliyor: **{info["title"]}**')
         except Exception as e:
-            await ctx.send(f"playback error: {e}")
+            await ctx.send(f"oynatma hatasi: {e}")
 
 bot.run(os.environ.get('TOKEN'))
