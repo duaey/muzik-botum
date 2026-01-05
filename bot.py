@@ -1,26 +1,24 @@
 import discord
 from discord.ext import commands
 import yt_dlp
-import asyncio
 import os
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 import static_ffmpeg
 from static_ffmpeg import run
 
-# setup ffmpeg path correctly
+# ffmpeg ayarlarını baştan yapalım kanka
 static_ffmpeg.add_paths()
 try:
     FFMPEG_EXE = run.get_or_fetch_platform_executables_else_raise()[0]
 except:
     FFMPEG_EXE = "ffmpeg"
 
-# koyeb health check server
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(b"Bot is running")
+        self.wfile.write(b"Bot is online")
 
 def run_health_check():
     server = HTTPServer(('0.0.0.0', 8080), HealthCheckHandler)
@@ -34,22 +32,20 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
+# en basit ve stabil ayarlar
 ytdl_opts = {
     'format': 'bestaudio/best',
     'noplaylist': True,
-    'nocheckcertificate': True,
     'quiet': True,
     'no_warnings': True,
     'default_search': 'auto',
-    'source_address': '0.0.0.0',
-    'http_headers': {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-    }
+    'source_address': '0.0.0.0'
 }
 
+# ses paketlerinin gitmesi için kritik ayarlar
 ffmpeg_opts = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-    'options': '-vn'
+    'options': '-vn -b:a 128k'
 }
 
 @bot.event
@@ -73,19 +69,20 @@ async def play(ctx, *, url):
                 info = ydl.extract_info(url, download=False)
                 url2 = info['url']
                 
-                # using standard FFmpegPCMAudio for stability
+                # kanka FFmpegPCMAudio'yu en yalın haliyle kullanalım
+                # opus falan karıştırmayalım ki kütüphane çakışmasın
                 source = discord.FFmpegPCMAudio(url2, executable=FFMPEG_EXE, **ffmpeg_opts)
+                
+                # botun ses kanalındaki ses seviyesini sabitleyelim
                 ctx.voice_client.play(source)
                 await ctx.send(f'now playing: **{info["title"]}**')
         except Exception as e:
-            await ctx.send(f"an error occurred: {e}")
+            await ctx.send(f"error: {e}")
 
 @bot.command()
 async def stop(ctx):
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
         await ctx.send("disconnected")
-    else:
-        await ctx.send("i am not in a voice channel")
 
 bot.run(os.environ.get('TOKEN'))
