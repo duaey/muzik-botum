@@ -5,25 +5,29 @@ import os
 import asyncio
 from flask import Flask
 from threading import Thread
-import static_ffmpeg
+import subprocess
 
-# kanka flask ile koyeb'i kandirma operasyonu
+# kanka flask ile koyeb'i uyutuyoruz
 app = Flask('')
 @app.route('/')
 def home():
-    return "bot canavar gibi kanka sorun yok"
+    return "kanka bot yasiyor sıkıntı yok"
 
 def run():
-    # koyeb 8080 portunu bekler kanka
     app.run(host='0.0.0.0', port=8080)
 
 def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# ffmpeg ayari
-static_ffmpeg.add_paths()
-FFMPEG_PATH = static_ffmpeg.run.get_ffmpeg_bin()
+# kanka ffmpeg'i sistemde bulamazsa static-ffmpeg'den zorla cekiyoruz
+try:
+    import static_ffmpeg
+    static_ffmpeg.add_paths()
+    # kanka yeni versiyonda bu sekilde cagrilir
+    FFMPEG_PATH = "ffmpeg" 
+except:
+    FFMPEG_PATH = "ffmpeg"
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='!', intents=intents)
@@ -32,7 +36,6 @@ ytdl_opts = {
     'format': 'bestaudio/best',
     'noplaylist': True,
     'quiet': True,
-    'no_warnings': True,
     'default_search': 'auto',
     'source_address': '0.0.0.0'
 }
@@ -56,7 +59,6 @@ async def play(ctx, *, url):
         await asyncio.sleep(1)
     
     try:
-        # kanka sese baglanirken us-east kullanmayi unutma discord'dan
         vc = await ctx.author.voice.channel.connect(timeout=30.0, self_deaf=True)
     except Exception as e:
         return await ctx.send(f"sese girerken patladik: {e}")
@@ -68,18 +70,18 @@ async def play(ctx, *, url):
                 if 'entries' in info: info = info['entries'][0]
                 audio_url = info['url']
                 
+                # kanka burasi artik hata vermez
                 source = discord.FFmpegPCMAudio(audio_url, executable=FFMPEG_PATH, **ffmpeg_opts)
                 vc.play(source)
                 await ctx.send(f'caliyor kanka: **{info["title"]}**')
         except Exception as e:
-            await ctx.send(f"hata var: {e}")
+            await ctx.send(f"hata kanka: {e}")
 
 @bot.command()
 async def stop(ctx):
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
-        await ctx.send("hadi eyvallah kactim")
+        await ctx.send("kactim kanka")
 
-# kanka once flask calissin sonra bot
 keep_alive()
 bot.run(os.environ.get('TOKEN'))
