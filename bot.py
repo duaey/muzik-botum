@@ -14,7 +14,7 @@ try:
 except:
     FFMPEG_EXE = "ffmpeg"
 
-# koyeb health check
+# health check server for koyeb
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -28,8 +28,20 @@ intents.message_content = True
 intents.voice_states = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-ytdl_opts = {'format': 'bestaudio/best', 'noplaylist': True, 'quiet': True}
-ffmpeg_opts = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
+# bu ayarlar seste takilmayi ve youtube engelini onler
+ytdl_opts = {
+    'format': 'bestaudio/best',
+    'noplaylist': True,
+    'quiet': True,
+    'no_warnings': True,
+    'default_search': 'auto',
+    'source_address': '0.0.0.0'
+}
+
+ffmpeg_opts = {
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+    'options': '-vn'
+}
 
 @bot.event
 async def on_ready():
@@ -38,21 +50,31 @@ async def on_ready():
 @bot.command()
 async def play(ctx, *, url):
     if not ctx.author.voice:
-        return await ctx.send("get in a voice channel")
+        return await ctx.send("get in a voice channel first")
     
     if not ctx.voice_client:
-        await ctx.author.voice.channel.connect()
+        # ses paketleri gitsin diye self_deaf kapali kalsin
+        await ctx.author.voice.channel.connect(self_deaf=False)
     
     if ctx.voice_client.is_playing():
         ctx.voice_client.stop()
 
     async with ctx.typing():
-        with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            url2 = info['url']
-            source = discord.FFmpegPCMAudio(url2, executable=FFMPEG_EXE, **ffmpeg_opts)
-            ctx.voice_client.play(source)
-    
-    await ctx.send(f'playing: **{info["title"]}**')
+        try:
+            with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                url2 = info['url']
+                # sesin discorda ulasmasi icin pcm audio kullaniyoruz
+                source = discord.FFmpegPCMAudio(url2, executable=FFMPEG_EXE, **ffmpeg_opts)
+                ctx.voice_client.play(source)
+                await ctx.send(f'now playing: **{info["title"]}**')
+        except Exception as e:
+            await ctx.send(f"hata kanka: {e}")
+
+@bot.command()
+async def stop(ctx):
+    if ctx.voice_client:
+        await ctx.voice_client.disconnect()
+        await ctx.send("bye bye")
 
 bot.run(os.environ.get('TOKEN'))
