@@ -5,24 +5,20 @@ import os
 import asyncio
 from flask import Flask
 from threading import Thread
+import static_ffmpeg # kanka bu sart
 
+# koyeb yasam destegi
 app = Flask('')
 @app.route('/')
-def home(): return "bot canavar"
+def home(): return "bot canavar gibi"
 def run(): app.run(host='0.0.0.0', port=8080)
 def keep_alive(): Thread(target=run, daemon=True).start()
 
+# kanka ffmpeg'i baslatiyoruz
+static_ffmpeg.add_paths()
+
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='!', intents=intents)
-
-ytdl_opts = {
-    'format': 'bestaudio/best',
-    'noplaylist': True,
-    'quiet': True,
-    'no_warnings': True,
-    'default_search': 'auto',
-    'nocheckcertificate': True,
-}
 
 ffmpeg_opts = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
@@ -43,26 +39,19 @@ async def play(ctx, *, search):
         await asyncio.sleep(1)
 
     try:
-        # kanka reconnect ekledik ki index hatasini zorlasin gecsin
-        vc = await ctx.author.voice.channel.connect(timeout=30.0, self_deaf=True, reconnect=True)
+        vc = await ctx.author.voice.channel.connect(timeout=30.0, self_deaf=True)
     except Exception as e:
         return await ctx.send(f"baglanti hatasi: {e}")
 
     async with ctx.typing():
         try:
-            # kanka mp3 linki ise youtube'a hic sormuyoruz bile
-            if search.startswith('http') and (search.endswith('.mp3') or 'soundhelix' in search):
-                source_url = search
-                title = "MP3 Linki"
-            else:
-                with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
-                    info = ydl.extract_info(f"ytsearch1:{search}", download=False)['entries'][0]
-                    source_url = info['url']
-                    title = info['title']
+            # kanka mp3 linki ise direkt calistiriyoruz
+            source = discord.FFmpegPCMAudio(search, **ffmpeg_opts)
+            # ses seviyesini sabitle kanka
+            source = discord.PCMVolumeTransformer(source, volume=0.8)
             
-            source = discord.FFmpegPCMAudio(source_url, executable='ffmpeg', **ffmpeg_opts)
-            vc.play(source)
-            await ctx.send(f'caliyor kanka: **{title}**')
+            vc.play(source, after=lambda e: print(f'bitti hata: {e}') if e else None)
+            await ctx.send(f'caliyor kanka: **{search}**')
         except Exception as e:
             await ctx.send(f"hata kanka: {e}")
 
