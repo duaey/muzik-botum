@@ -2,32 +2,32 @@ import discord
 from discord.ext import commands
 import yt_dlp
 import os
-import static_ffmpeg
-from static_ffmpeg import run
+import asyncio
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
-import asyncio
 
-# ffmpeg tam yolunu zorlayalim
-static_ffmpeg.add_paths()
-try:
-    FFMPEG_EXE = run.get_or_fetch_platform_executables_else_raise()[0]
-except:
-    FFMPEG_EXE = "ffmpeg"
-
+# kanka ffmpeg isini en garanti yola aliyoruz
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(b"Bot is alive")
+        self.wfile.write(b"Bot online")
 
 threading.Thread(target=lambda: HTTPServer(('0.0.0.0', 8080), HealthCheckHandler).serve_forever(), daemon=True).start()
 
-# intents ayarlarini en genis hale getirdik
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-ytdl_opts = {'format': 'bestaudio/best', 'noplaylist': True, 'quiet': True}
+# youtube ayarlari
+ytdl_opts = {
+    'format': 'bestaudio/best',
+    'noplaylist': True,
+    'quiet': True,
+    'no_warnings': True,
+    'default_search': 'auto',
+    'source_address': '0.0.0.0'
+}
+
 ffmpeg_opts = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
     'options': '-vn'
@@ -35,36 +35,40 @@ ffmpeg_opts = {
 
 @bot.event
 async def on_ready():
-    print(f'bot online kanka: {bot.user}')
+    print(f'bot online: {bot.user}')
 
 @bot.command()
 async def play(ctx, *, url):
     if not ctx.author.voice:
-        return await ctx.send("get in a voice channel first")
+        return await ctx.send("once sese gir kanka")
     
-    # varsa eski bozuk baglantiyi zorla kapat
-    if ctx.voice_client:
-        try:
-            await ctx.voice_client.disconnect(force=True)
-        except:
-            pass
-        await asyncio.sleep(2)
-
-    try:
-        # baglanti sirasinda 4006'yi onlemek icin self_deaf ve self_mute kapali kalsin
-        vc = await ctx.author.voice.channel.connect(timeout=60.0, self_deaf=False, self_mute=False)
-    except Exception as e:
-        return await ctx.send(f"baglanti patladi kanka: {e}")
-
+    if not ctx.voice_client:
+        await ctx.author.voice.channel.connect()
+    
     async with ctx.typing():
         try:
             with yt_dlp.YoutubeDL(ytdl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
+                # kanka eger bir liste donerse ilkini al diyoruz hata cikmasin
+                if 'entries' in info:
+                    info = info['entries'][0]
+                
                 url2 = info['url']
-                source = discord.FFmpegPCMAudio(url2, executable=FFMPEG_EXE, **ffmpeg_opts)
-                vc.play(source)
-                await ctx.send(f'caliyor: **{info["title"]}**')
+                # kanka direkt ffmpeg yaziyoruz koyeb bunu otomatik tanir artik
+                source = discord.FFmpegPCMAudio(url2, **ffmpeg_opts)
+                
+                if ctx.voice_client.is_playing():
+                    ctx.voice_client.stop()
+                    
+                ctx.voice_client.play(source)
+                await ctx.send(f'caliyor kanka: **{info["title"]}**')
         except Exception as e:
-            await ctx.send(f"oynatma hatasi: {e}")
+            await ctx.send(f"hata cikti kanka: {e}")
+
+@bot.command()
+async def stop(ctx):
+    if ctx.voice_client:
+        await ctx.voice_client.disconnect()
+        await ctx.send("hadi kactim")
 
 bot.run(os.environ.get('TOKEN'))
