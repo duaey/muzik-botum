@@ -5,6 +5,8 @@ import asyncio
 import os
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
+import static_ffmpeg
+static_ffmpeg.add_paths()
 
 # --- KOYEB ICIN YALANCI WEB SUNUCUSU ---
 class HealthCheckHandler(BaseHTTPRequestHandler):
@@ -45,3 +47,4 @@ async def cal(ctx, *, url):
     await ctx.send(f'caliyorum: {info["title"]}')
 
 bot.run(os.environ.get('TOKEN'))
+
